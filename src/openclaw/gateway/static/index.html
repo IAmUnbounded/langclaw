@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="OpenClaw-Lang WebChat — Personal AI Assistant powered by LangGraph">
+    <title>🦞 OpenClaw-Lang — WebChat</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+</head>
+<body>
+    <div class="app" id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-logo">🦞</span>
+                <div>
+                    <div class="sidebar-title">OpenClaw-Lang</div>
+                    <div class="sidebar-subtitle">Personal AI Assistant</div>
+                </div>
+            </div>
+
+            <button class="new-chat-btn" id="newChatBtn" onclick="newChat()">
+                <span>+</span> New Chat
+            </button>
+
+            <div class="sessions-list" id="sessionsList">
+                <!-- Sessions populated by JS -->
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="status-badge" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-title" id="headerTitle">New Chat</div>
+                <div class="header-model" id="headerModel">Loading...</div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area" id="chatArea">
+                <!-- Welcome Screen -->
+                <div class="welcome" id="welcomeScreen">
+                    <div class="welcome-emoji">🦞</div>
+                    <div class="welcome-title">OpenClaw-Lang</div>
+                    <div class="welcome-subtitle">
+                        Your personal AI assistant. Ask me anything — I can search the web,
+                        read & write files, run commands, and help with any task.
+                    </div>
+                    <div class="welcome-chips">
+                        <button class="welcome-chip" onclick="quickSend('What can you do?')">What can you do?</button>
+                        <button class="welcome-chip" onclick="quickSend('Search the web for latest tech news')">🔍 Search the web</button>
+                        <button class="welcome-chip" onclick="quickSend('List files in the current directory')">📁 List files</button>
+                        <button class="welcome-chip" onclick="quickSend('Write a Python hello world script')">🐍 Write code</button>
+                    </div>
+                </div>
+
+                <!-- Typing indicator -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="message-avatar" style="background: var(--accent-gradient);">🦞</div>
+                    <div class="typing-dots">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea
+                        class="input-textarea"
+                        id="inputTextarea"
+                        placeholder="Message OpenClaw..."
+                        rows="1"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                        ↑
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Enter to send · Shift+Enter for new line · Tools: bash, files, web search
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

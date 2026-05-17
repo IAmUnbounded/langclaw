@@ -53,6 +53,18 @@ class AgentState(BaseModel):
         default=0,
         description="Sub-agent nesting depth (0 = top-level). Max 3.",
     )
+    iteration_count: int = Field(
+        default=0,
+        description="Current ReAct loop iteration (incremented per llm_call).",
+    )
+    tool_loop_history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Tool call history for loop detection [{tool_name, call_hash, output_hash}].",
+    )
+    tool_loop_total_calls: int = Field(
+        default=0,
+        description="Total tool calls in this run (for circuit breaker).",
+    )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary metadata.",

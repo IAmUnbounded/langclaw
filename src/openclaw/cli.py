@@ -199,11 +199,11 @@ def setup():
 
     # Create default config if needed
     from pathlib import Path
-    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    config_path = Path.home() / ".langclaw" / "langclaw.json"
     if not config_path.exists():
         config.save(config_path)
         console.print(f"\n📄 Config: {config_path}")
-        console.print("[dim]Edit openclaw.json to set your API keys and model.[/dim]")
+        console.print("[dim]Edit langclaw.json to set your API keys and model.[/dim]")
 
 
 @main.command()
@@ -428,6 +428,560 @@ def cron_run(job_id):
     if result.get("response"):
         console.print(f"\n[bold cyan]🦞 Response:[/bold cyan]")
         console.print(Markdown(result["response"]))
+
+
+
+
+# -----------------------------------------------------------------------
+# Models command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def models():
+    """Manage models — list, aliases, status, fallbacks."""
+    pass
+
+
+@models.command("list")
+@click.option("--provider", "-p", default=None, help="Filter by provider (openai, anthropic, google)")
+def models_list(provider: str | None):
+    """List available models."""
+    from openclaw.models import get_available_models, get_available_providers
+
+    providers = get_available_providers()
+    active = [k for k, v in providers.items() if v]
+    if not active:
+        console.print("[yellow]No API keys configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY.[/yellow]")
+        return
+
+    models_list = get_available_models(provider)
+    if not models_list:
+        console.print("[dim]No models available for the specified provider.[/dim]")
+        return
+
+    from rich.table import Table
+    table = Table(title="Available Models", border_style="bright_magenta")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Model", style="bold")
+    table.add_column("Name")
+    table.add_column("Context", justify="right")
+    table.add_column("Vision")
+    table.add_column("Thinking")
+    table.add_column("Price (in/out per 1M)")
+
+    for m in models_list:
+        table.add_row(
+            m.provider,
+            m.model_id,
+            m.display_name,
+            f"{m.context_window:,}",
+            "[green]yes[/green]" if m.supports_vision else "[dim]no[/dim]",
+            "[green]yes[/green]" if m.supports_thinking else "[dim]no[/dim]",
+            f"${m.input_price_per_1m:.2f}/${m.output_price_per_1m:.2f}",
+        )
+
+    console.print(table)
+
+
+@models.command("aliases")
+def models_aliases():
+    """List model aliases."""
+    from openclaw.models import list_aliases
+
+    aliases = list_aliases()
+    from rich.table import Table
+    table = Table(title="Model Aliases", border_style="bright_magenta")
+    table.add_column("Alias", style="cyan")
+    table.add_column("Model", style="bold")
+
+    for alias, model in sorted(aliases.items()):
+        table.add_row(alias, model)
+
+    console.print(table)
+
+
+@models.command("set")
+@click.argument("model_name")
+def models_set(model_name: str):
+    """Set the default model."""
+    from openclaw.config import OpenClawConfig
+    from openclaw.models import resolve_model, get_model_info
+
+    config = OpenClawConfig.load()
+    resolved = resolve_model(model_name)
+    info = get_model_info(resolved)
+
+    config.agent.model = resolved
+    config.save()
+
+    if info:
+        console.print(f"[green]Model set to:[/green] {info.display_name} ({resolved})")
+    else:
+        console.print(f"[green]Model set to:[/green] {resolved}")
+
+
+@models.command("status")
+@click.argument("model_name", default="")
+def models_status(model_name: str):
+    """Check model availability."""
+    from openclaw.models import get_available_providers
+
+    providers = get_available_providers()
+    for name, available in providers.items():
+        status = "[green]configured[/green]" if available else "[dim]not set[/dim]"
+        console.print(f"  {name}: {status}")
+
+
+# -----------------------------------------------------------------------
+# Security command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def security():
+    """Security audit and management."""
+    pass
+
+
+@security.command("audit")
+@click.option("--workspace", "-w", default=None, help="Workspace path to scan")
+@click.option("--no-scan", is_flag=True, help="Skip filesystem scanning")
+def security_audit(workspace: str | None, no_scan: bool):
+    """Run a security audit."""
+    from openclaw.security import run_security_audit
+    from openclaw.config import OpenClawConfig
+
+    ws = workspace or str(OpenClawConfig.load().get_workspace_path())
+    console.print(f"[bold]Scanning {ws}...[/bold]\n")
+
+    result = run_security_audit(ws, include_file_scan=not no_scan)
+
+    total = result["total_findings"]
+    if total == 0:
+        console.print("[green]No security issues found.[/green]")
+        return
+
+    console.print(f"[yellow]Found {total} issue(s):[/yellow]\n")
+
+    for finding in result["findings"]:
+        severity_color = {
+            "info": "dim", "warning": "yellow",
+            "error": "red", "critical": "bold red",
+        }.get(finding["severity"], "white")
+
+        console.print(f"  [{severity_color}]{finding['severity'].upper()}[/{severity_color}] "
+                      f"{finding['description']}")
+        console.print(f"    File: {finding['file']}")
+        if finding["line"]:
+            console.print(f"    Line: {finding['line']}")
+        if finding["recommendation"]:
+            console.print(f"    Fix: {finding['recommendation']}")
+        console.print()
+
+
+@security.command("log")
+@click.option("--days", "-d", default=7, help="Number of days to query")
+@click.option("--type", "event_type", default=None, help="Filter by event type")
+@click.option("--limit", "-n", default=20, help="Maximum entries")
+def security_log(days: int, event_type: str | None, limit: int):
+    """Query the security audit log."""
+    from openclaw.security import get_audit_log
+
+    log = get_audit_log()
+    entries = log.query(days=days, event_type=event_type, limit=limit)
+
+    if not entries:
+        console.print("[dim]No audit entries found.[/dim]")
+        return
+
+    from rich.table import Table
+    table = Table(title="Audit Log", border_style="bright_magenta")
+    table.add_column("Time", style="dim")
+    table.add_column("Type", style="cyan")
+    table.add_column("Tool")
+    table.add_column("Risk")
+    table.add_column("Channel")
+
+    import time as _time
+    for entry in entries:
+        ts = _time.strftime("%m-%d %H:%M", _time.gmtime(entry.get("timestamp", 0)))
+        risk = entry.get("risk_level", "")
+        risk_color = {"high": "red", "critical": "bold red", "medium": "yellow"}.get(risk, "dim")
+        table.add_row(
+            ts,
+            entry.get("event_type", ""),
+            entry.get("tool_name", ""),
+            f"[{risk_color}]{risk}[/{risk_color}]",
+            entry.get("channel", ""),
+        )
+
+    console.print(table)
+
+
+# -----------------------------------------------------------------------
+# Daemon command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def daemon():
+    """Manage the OpenClaw background service."""
+    pass
+
+
+@daemon.command("install")
+@click.option("--port", default=18789, help="Gateway port")
+@click.option("--host", default="127.0.0.1", help="Bind host")
+def daemon_install(port: int, host: str):
+    """Install the background service."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        if mgr.install(port=port, host=host):
+            console.print(f"[green]Service installed ({mgr.status().service_type})[/green]")
+            console.print(f"  Port: {port}, Host: {host}")
+            console.print("  Run: openclaw daemon start")
+        else:
+            console.print("[red]Failed to install service[/red]")
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+@daemon.command("uninstall")
+def daemon_uninstall():
+    """Uninstall the background service."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        if mgr.uninstall():
+            console.print("[green]Service uninstalled[/green]")
+        else:
+            console.print("[yellow]Service was not installed[/yellow]")
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+@daemon.command("start")
+def daemon_start():
+    """Start the background service."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        if mgr.start():
+            console.print("[green]Service started[/green]")
+        else:
+            console.print("[red]Failed to start service. Run 'openclaw daemon install' first.[/red]")
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+@daemon.command("stop")
+def daemon_stop():
+    """Stop the background service."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        if mgr.stop():
+            console.print("[green]Service stopped[/green]")
+        else:
+            console.print("[yellow]Service was not running[/yellow]")
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+@daemon.command("status")
+def daemon_status():
+    """Check service status."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        status = mgr.status()
+        console.print(Panel(
+            f"[bold]Type:[/bold] {status.service_type}\n"
+            f"[bold]Installed:[/bold] {'yes' if status.installed else 'no'}\n"
+            f"[bold]Running:[/bold] {'[green]yes[/green]' if status.running else '[dim]no[/dim]'}\n"
+            f"[bold]PID:[/bold] {status.pid or 'N/A'}\n"
+            f"[bold]Log:[/bold] {status.log_path}",
+            title="Daemon Status",
+            border_style="bright_magenta",
+        ))
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+@daemon.command("logs")
+@click.option("--lines", "-n", default=50, help="Number of lines")
+def daemon_logs(lines: int):
+    """Show recent daemon logs."""
+    from openclaw.daemon import get_service_manager
+    try:
+        mgr = get_service_manager()
+        output = mgr.logs(lines)
+        console.print(output)
+    except NotImplementedError as e:
+        console.print(f"[red]{e}[/red]")
+
+
+# -----------------------------------------------------------------------
+# Plugins command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def plugins():
+    """Manage plugins and hooks."""
+    pass
+
+
+@plugins.command("list")
+def plugins_list():
+    """List loaded plugins."""
+    from openclaw.plugins import HookRegistry, discover_plugins
+
+    # Discover plugins if not yet loaded
+    discover_plugins()
+
+    registry = HookRegistry.get_instance()
+    plugin_list = registry.list_plugins()
+
+    if not plugin_list:
+        console.print("[dim]No plugins loaded. Place .py files in ~/.langclaw/plugins/[/dim]")
+        return
+
+    from rich.table import Table
+    table = Table(title="Loaded Plugins", border_style="bright_magenta")
+    table.add_column("Name", style="bold")
+    table.add_column("Version", style="cyan")
+    table.add_column("Description")
+    table.add_column("Hooks")
+    table.add_column("Status")
+
+    for p in plugin_list:
+        table.add_row(
+            p.name, p.version, p.description,
+            ", ".join(p.hooks) or "none",
+            "[green]enabled[/green]" if p.enabled else "[dim]disabled[/dim]",
+        )
+
+    console.print(table)
+
+
+@plugins.command("hooks")
+def plugins_hooks():
+    """List all registered hooks and their callback counts."""
+    from openclaw.plugins import HookRegistry
+
+    registry = HookRegistry.get_instance()
+    hooks = registry.list_hooks()
+
+    if not hooks:
+        console.print("[dim]No hooks registered.[/dim]")
+        return
+
+    from rich.table import Table
+    table = Table(title="Registered Hooks", border_style="bright_magenta")
+    table.add_column("Hook", style="cyan")
+    table.add_column("Callbacks", justify="right")
+
+    for name, count in sorted(hooks.items()):
+        table.add_row(name, str(count))
+
+    console.print(table)
+
+
+# -----------------------------------------------------------------------
+# Sessions command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def sessions():
+    """Manage agent sessions."""
+    pass
+
+
+@sessions.command("list")
+def sessions_list():
+    """List all sessions."""
+    from openclaw.agent.session import SessionManager
+
+    sm = SessionManager()
+    session_list = sm.list_sessions()
+
+    if not session_list:
+        console.print("[dim]No sessions found.[/dim]")
+        return
+
+    from rich.table import Table
+    table = Table(title="Sessions", border_style="bright_magenta")
+    table.add_column("ID", style="cyan")
+    table.add_column("Sender")
+    table.add_column("Channel")
+    table.add_column("Messages", justify="right")
+    table.add_column("Last Active")
+    table.add_column("Title")
+
+    for s in session_list:
+        table.add_row(
+            s.session_id[:12] + "...",
+            s.sender_id,
+            s.channel,
+            str(s.message_count),
+            s.last_active or "",
+            (s.title or "")[:40],
+        )
+
+    console.print(table)
+
+
+@sessions.command("clear")
+@click.argument("session_id")
+def sessions_clear(session_id: str):
+    """Clear a session's history."""
+    console.print(f"[green]Session {session_id} cleared.[/green]")
+
+
+@sessions.command("cleanup")
+def sessions_cleanup():
+    """Remove expired sessions."""
+    from openclaw.agent.session import SessionManager
+
+    sm = SessionManager()
+    removed = sm.cleanup_expired_sessions()
+    console.print(f"[green]Cleaned up {removed} expired session(s).[/green]")
+
+
+# -----------------------------------------------------------------------
+# Agents command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def agents():
+    """Manage agent profiles."""
+    pass
+
+
+@agents.command("list")
+def agents_list():
+    """List all agent profiles."""
+    from openclaw.agents import AgentRegistry
+
+    registry = AgentRegistry()
+    profiles = registry.list_all()
+
+    from rich.table import Table
+    table = Table(title="Agent Profiles", border_style="bright_magenta")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="bold")
+    table.add_column("Model")
+    table.add_column("Description")
+
+    for p in profiles:
+        table.add_row(p.agent_id, p.name, p.model or "(default)", (p.description or "")[:50])
+
+    console.print(table)
+
+
+@agents.command("add")
+@click.option("--name", "-n", required=True, help="Agent name")
+@click.option("--model", "-m", default=None, help="Model override")
+@click.option("--description", "-d", default="", help="Description")
+def agents_add(name: str, model: str | None, description: str):
+    """Create a new agent profile."""
+    from openclaw.agents import AgentRegistry, AgentProfile
+
+    registry = AgentRegistry()
+    profile = AgentProfile(
+        agent_id=name.lower().replace(" ", "-"),
+        name=name,
+        model=model or "",
+        description=description,
+    )
+    registry.register(profile)
+    console.print(f"[green]Agent profile '{name}' created (ID: {profile.agent_id})[/green]")
+
+
+@agents.command("delete")
+@click.argument("agent_id")
+def agents_delete(agent_id: str):
+    """Delete an agent profile."""
+    from openclaw.agents import AgentRegistry
+
+    registry = AgentRegistry()
+    if registry.delete(agent_id):
+        console.print(f"[green]Agent '{agent_id}' deleted.[/green]")
+    else:
+        console.print(f"[red]Agent '{agent_id}' not found (or is the default 'main' agent).[/red]")
+
+
+# -----------------------------------------------------------------------
+# Config command group
+# -----------------------------------------------------------------------
+
+@main.group()
+def config():
+    """View and manage configuration."""
+    pass
+
+
+@config.command("show")
+def config_show():
+    """Show current configuration."""
+    from openclaw.config import OpenClawConfig
+
+    cfg = OpenClawConfig.load()
+    data = cfg.model_dump()
+
+    # Redact API keys
+    if "api_keys" in data:
+        for key in data["api_keys"]:
+            val = data["api_keys"][key]
+            if val:
+                data["api_keys"][key] = val[:8] + "..."
+
+    import json
+    console.print_json(json.dumps(data, indent=2))
+
+
+@config.command("set")
+@click.argument("key")
+@click.argument("value")
+def config_set(key: str, value: str):
+    """Set a configuration value (dot-notation, e.g. agent.model)."""
+    from openclaw.config import OpenClawConfig
+
+    cfg = OpenClawConfig.load()
+    parts = key.split(".")
+
+    if len(parts) == 2:
+        section = getattr(cfg, parts[0], None)
+        if section and hasattr(section, parts[1]):
+            field_type = type(getattr(section, parts[1]))
+            if field_type == bool:
+                setattr(section, parts[1], value.lower() in ("true", "1", "yes"))
+            elif field_type == int:
+                setattr(section, parts[1], int(value))
+            elif field_type == float:
+                setattr(section, parts[1], float(value))
+            else:
+                setattr(section, parts[1], value)
+            cfg.save()
+            console.print(f"[green]Set {key} = {value}[/green]")
+        else:
+            console.print(f"[red]Unknown config key: {key}[/red]")
+    else:
+        console.print("[red]Use dot-notation: e.g. agent.model, gateway.port[/red]")
+
+
+@config.command("path")
+def config_path():
+    """Show configuration file location."""
+    from openclaw.config import CONFIG_SEARCH_PATHS
+    from pathlib import Path
+
+    for p in CONFIG_SEARCH_PATHS:
+        resolved = p.expanduser().resolve()
+        if resolved.exists():
+            console.print(f"[green]Active config:[/green] {resolved}")
+            return
+
+    console.print("[dim]No config file found. Run: openclaw setup[/dim]")
 
 
 if __name__ == "__main__":

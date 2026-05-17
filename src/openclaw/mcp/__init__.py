@@ -4,7 +4,7 @@ Supports connecting to MCP servers via stdio transport, discovering
 their tools, and calling them dynamically. This allows OpenClaw-Lang
 to integrate with any MCP-compatible tool server.
 
-Configuration example in openclaw.json:
+Configuration example in langclaw.json:
 {
     "mcp_servers": {
         "filesystem": {

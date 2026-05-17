@@ -7,7 +7,7 @@ from typing import Any
 
 
 def load_skills(workspace: Path) -> list[dict[str, Any]]:
-    """Load skills from workspace/skills/ and ~/.openclaw/skills/.
+    """Load skills from workspace/skills/ and ~/.langclaw/skills/.
 
     Each skill is a directory containing a SKILL.md file.
     The SKILL.md can have YAML frontmatter with name/description.
@@ -17,7 +17,7 @@ def load_skills(workspace: Path) -> list[dict[str, Any]]:
     skills: list[dict[str, Any]] = []
     search_dirs = [
         workspace / "skills",
-        Path.home() / ".openclaw" / "skills",
+        Path.home() / ".langclaw" / "skills",
     ]
 
     for skill_dir in search_dirs:

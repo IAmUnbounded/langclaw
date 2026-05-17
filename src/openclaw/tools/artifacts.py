@@ -3,7 +3,7 @@
 Lets the agent create task plans with checklists and produce
 named artifacts (markdown documents) for organized output.
 
-Storage: ~/.openclaw/plans/ and ~/.openclaw/artifacts/
+Storage: ~/.langclaw/plans/ and ~/.langclaw/artifacts/
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-PLANS_DIR = Path.home() / ".openclaw" / "plans"
-ARTIFACTS_DIR = Path.home() / ".openclaw" / "artifacts"
+PLANS_DIR = Path.home() / ".langclaw" / "plans"
+ARTIFACTS_DIR = Path.home() / ".langclaw" / "artifacts"
 
 
 def _ensure_dirs():

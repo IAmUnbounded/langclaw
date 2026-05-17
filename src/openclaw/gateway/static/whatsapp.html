@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp — OpenClaw-Lang</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+    <style>
+        body {
+            overflow: auto;
+        }
+
+        .wa-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .wa-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 48px;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .wa-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .wa-logo {
+            font-size: 36px;
+        }
+
+        .wa-title {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .wa-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .wa-breadcrumb {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 32px;
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .wa-breadcrumb a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        .wa-breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        /* QR Code Area */
+        .qr-area {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 0 auto 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .qr-area canvas,
+        .qr-area img,
+        .qr-area table {
+            display: block;
+        }
+
+        .qr-area.loading {
+            background: var(--bg-tertiary);
+        }
+
+        .qr-spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border-subtle);
+            border-top-color: #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Status states */
+        .wa-status {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .wa-status-icon {
+            font-size: 48px;
+        }
+
+        .wa-status-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .wa-status-detail {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .wa-status-connected .wa-status-icon { color: #25D366; }
+        .wa-status-error .wa-status-icon { color: var(--color-error); }
+
+        /* Steps */
+        .wa-steps {
+            text-align: left;
+            margin: 24px 0;
+        }
+
+        .wa-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 0;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .wa-step-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex-shrink: 0;
+        }
+
+        .wa-step.active .wa-step-num {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            border-color: transparent;
+            color: white;
+        }
+
+        /* Buttons */
+        .wa-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            border: none;
+        }
+
+        .wa-btn-primary {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            color: white;
+        }
+
+        .wa-btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(37, 211, 102, 0.3);
+        }
+
+        .wa-btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .wa-btn-secondary:hover {
+            border-color: var(--border-accent);
+        }
+
+        .wa-btn-danger {
+            background: transparent;
+            color: var(--color-error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .wa-btn-danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .wa-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+
+        /* Phone number display */
+        .wa-phone {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(37, 211, 102, 0.1);
+            border: 1px solid rgba(37, 211, 102, 0.2);
+            border-radius: var(--radius-full);
+            font-size: 14px;
+            font-weight: 500;
+            color: #25D366;
+            margin: 12px 0;
+        }
+
+        /* Install notice */
+        .wa-install {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-accent);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin: 16px 0;
+            text-align: left;
+        }
+
+        .wa-install-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 8px;
+        }
+
+        .wa-install code {
+            display: block;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-top: 8px;
+            user-select: all;
+        }
+
+        .wa-install p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Warning */
+        .wa-warning {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 16px;
+            background: rgba(234, 179, 8, 0.1);
+            border: 1px solid rgba(234, 179, 8, 0.2);
+            border-radius: var(--radius-sm);
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .wa-warning-icon {
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .wa-warning-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Nav back */
+        .wa-nav {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+        }
+
+        .wa-nav a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.2s;
+        }
+
+        .wa-nav a:hover {
+            color: var(--accent-primary);
+        }
+    </style>
+</head>
+<body>
+    <nav class="wa-nav">
+        <a href="/webchat">← Back to WebChat</a>
+    </nav>
+
+    <div class="wa-container">
+        <div class="wa-card">
+            <div class="wa-header">
+                <span class="wa-logo">🦞</span>
+                <span class="wa-title">Link WhatsApp</span>
+            </div>
+            <div class="wa-subtitle">Connect your WhatsApp account to OpenClaw-Lang</div>
+
+            <!-- State: Loading -->
+            <div id="stateLoading">
+                <div class="qr-area loading">
+                    <div class="qr-spinner"></div>
+                </div>
+                <div class="wa-status">
+                    <div class="wa-status-text" id="loadingText">Connecting...</div>
+                    <div class="wa-status-detail">Initializing WhatsApp connection</div>
+                </div>
+            </div>
+
+            <!-- State: QR Code -->
+            <div id="stateQR" style="display:none;">
+                <div class="qr-area" id="qrArea">
+                    <!-- QR code rendered here -->
+                </div>
+
+                <div class="wa-steps">
+                    <div class="wa-step active">
+                        <div class="wa-step-num">1</div>
+                        <div>Open WhatsApp on your phone</div>
+                    </div>
+                    <div class="wa-step active">
+                        <div class="wa-step-num">2</div>
+                        <div>Tap <strong style="color:var(--text-primary);">Menu</strong> or <strong style="color:var(--text-primary);">Settings</strong> → <strong style="color:var(--text-primary);">Linked Devices</strong></div>
+                    </div>
+                    <div class="wa-step active">
+                        <div class="wa-step-num">3</div>
+                        <div>Tap <strong style="color:var(--text-primary);">Link a Device</strong> and scan the QR code above</div>
+                    </div>
+                </div>
+
+                <div class="wa-actions">
+                    <button class="wa-btn wa-btn-secondary" onclick="refreshQR()">Refresh QR</button>
+                </div>
+
+                <div class="wa-warning">
+                    <span class="wa-warning-icon">&#x26A0;</span>
+                    <span class="wa-warning-text">
+                        We recommend using a dedicated phone number for AI assistants.
+                        Using your personal number may risk account restrictions from WhatsApp.
+                    </span>
+                </div>
+            </div>
+
+            <!-- State: Connected -->
+            <div id="stateConnected" style="display:none;">
+                <div class="wa-status wa-status-connected">
+                    <div class="wa-status-icon">&#x2705;</div>
+                    <div class="wa-status-text">WhatsApp Connected</div>
+                    <div class="wa-phone" id="phoneNumber"></div>
+                    <div class="wa-status-detail">
+                        Messages from WhatsApp will be handled by OpenClaw-Lang.
+                        Send a message to this number to chat with your AI assistant.
+                    </div>
+                </div>
+                <div class="wa-actions">
+                    <a href="/webchat" class="wa-btn wa-btn-primary">Open WebChat</a>
+                    <button class="wa-btn wa-btn-danger" onclick="unlinkWhatsApp()">Unlink Account</button>
+                </div>
+            </div>
+
+            <!-- State: Error / Not Installed -->
+            <div id="stateError" style="display:none;">
+                <div class="wa-status wa-status-error">
+                    <div class="wa-status-icon">&#x26A0;&#xFE0F;</div>
+                    <div class="wa-status-text" id="errorTitle">Setup Required</div>
+                    <div class="wa-status-detail" id="errorDetail"></div>
+                </div>
+
+                <div class="wa-install" id="installNotice">
+                    <div class="wa-install-title">Install WhatsApp Dependencies</div>
+                    <p>The neonize library provides WhatsApp Web protocol support via Python bindings for whatsmeow.</p>
+                    <code>pip install "openclaw-lang[whatsapp]"</code>
+                </div>
+
+                <div class="wa-actions">
+                    <button class="wa-btn wa-btn-primary" onclick="retryConnect()">Retry Connection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const WS_URL = `ws://${location.host}/ws/whatsapp`;
+    let ws = null;
+    let reconnectTimer = null;
+
+    function showState(stateId) {
+        ['stateLoading', 'stateQR', 'stateConnected', 'stateError'].forEach(id => {
+            document.getElementById(id).style.display = id === stateId ? 'block' : 'none';
+        });
+    }
+
+    function renderQR(data) {
+        const area = document.getElementById('qrArea');
+        area.innerHTML = '';
+        area.classList.remove('loading');
+
+        try {
+            const qr = qrcode(0, 'M');
+            qr.addData(data);
+            qr.make();
+
+            const size = 264;
+            const moduleCount = qr.getModuleCount();
+            const cellSize = Math.floor(size / moduleCount);
+            const offset = Math.floor((size - cellSize * moduleCount) / 2);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // White background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+
+            // Draw modules
+            ctx.fillStyle = '#000000';
+            for (let row = 0; row < moduleCount; row++) {
+                for (let col = 0; col < moduleCount; col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect(
+                            offset + col * cellSize,
+                            offset + row * cellSize,
+                            cellSize, cellSize
+                        );
+                    }
+                }
+            }
+
+            area.appendChild(canvas);
+        } catch (e) {
+            console.error('QR render error:', e);
+            area.innerHTML = '<div style="color:#333;font-size:12px;padding:20px;">QR code error. Click Refresh.</div>';
+        }
+    }
+
+    function connect() {
+        if (ws && ws.readyState === WebSocket.OPEN) return;
+
+        showState('stateLoading');
+        document.getElementById('loadingText').textContent = 'Connecting...';
+
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            console.log('WhatsApp WS connected');
+            ws.send(JSON.stringify({ type: 'status' }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            } catch (e) {
+                console.error('Parse error:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('WhatsApp WS disconnected');
+            // Attempt reconnect after 3s
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, 3000);
+        };
+
+        ws.onerror = (e) => {
+            console.error('WS error:', e);
+        };
+    }
+
+    function handleMessage(msg) {
+        switch (msg.type) {
+            case 'qr':
+                showState('stateQR');
+                renderQR(msg.data);
+                break;
+
+            case 'status':
+                handleStatus(msg);
+                break;
+
+            case 'error':
+                showState('stateError');
+                document.getElementById('errorTitle').textContent = 'Connection Error';
+                document.getElementById('errorDetail').textContent = msg.message || 'Unknown error';
+                document.getElementById('installNotice').style.display =
+                    (msg.message || '').includes('neonize') ? 'block' : 'none';
+                break;
+
+            case 'connected':
+                showState('stateConnected');
+                const phone = msg.phone || 'Unknown';
+                document.getElementById('phoneNumber').textContent = '+' + phone;
+                break;
+
+            case 'disconnected':
+            case 'unlinked':
+                showState('stateLoading');
+                document.getElementById('loadingText').textContent = 'Disconnected';
+                setTimeout(() => connect(), 2000);
+                break;
+        }
+    }
+
+    function handleStatus(msg) {
+        switch (msg.state) {
+            case 'connected':
+                showState('stateConnected');
+                const phone = msg.phone || 'Unknown';
+                document.getElementById('phoneNumber').textContent = '+' + phone;
+                break;
+            case 'qr':
+                showState('stateQR');
+                if (msg.qr_data) renderQR(msg.qr_data);
+                break;
+            case 'connecting':
+                showState('stateLoading');
+                document.getElementById('loadingText').textContent = msg.message || 'Connecting...';
+                break;
+            case 'error':
+                showState('stateError');
+                document.getElementById('errorTitle').textContent = 'Setup Required';
+                document.getElementById('errorDetail').textContent = msg.message || '';
+                document.getElementById('installNotice').style.display =
+                    (msg.message || '').includes('neonize') ? 'block' : 'none';
+                break;
+            default:
+                showState('stateLoading');
+                document.getElementById('loadingText').textContent = msg.message || msg.state || 'Loading...';
+        }
+    }
+
+    function refreshQR() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'refresh_qr' }));
+            showState('stateLoading');
+            document.getElementById('loadingText').textContent = 'Refreshing QR code...';
+        }
+    }
+
+    function unlinkWhatsApp() {
+        if (confirm('Are you sure you want to unlink your WhatsApp account?')) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'unlink' }));
+                showState('stateLoading');
+                document.getElementById('loadingText').textContent = 'Unlinking...';
+            }
+        }
+    }
+
+    function retryConnect() {
+        showState('stateLoading');
+        document.getElementById('loadingText').textContent = 'Retrying...';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'retry' }));
+        } else {
+            connect();
+        }
+    }
+
+    // Start connection
+    connect();
+    </script>
+</body>
+</html>

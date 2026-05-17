@@ -4,7 +4,7 @@ Mirrors OpenClaw's cron/wakeup system:
 - Schedule types: 'at' (one-shot), 'every' (interval), 'cron' (expression)
 - Execution: main session (system event) or isolated (dedicated agent turn)
 - Delivery: announce to channel, webhook, or none
-- Persistence: jobs stored in ~/.openclaw/cron/jobs.json
+- Persistence: jobs stored in ~/.langclaw/cron/jobs.json
 - The agent can create/manage jobs via the cron tool
 """
 
@@ -22,7 +22,7 @@ from typing import Any, Callable, Awaitable, Optional
 
 logger = logging.getLogger(__name__)
 
-CRON_DIR = Path.home() / ".openclaw" / "cron"
+CRON_DIR = Path.home() / ".langclaw" / "cron"
 JOBS_FILE = CRON_DIR / "jobs.json"
 
 
@@ -216,10 +216,15 @@ class CronStore:
         if JOBS_FILE.exists():
             try:
                 data = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
-                for job_data in data:
-                    job = CronJob.from_dict(job_data)
-                    self.jobs[job.job_id] = job
-            except (json.JSONDecodeError, TypeError, KeyError):
+                # Support both flat list and {version, jobs} format
+                if isinstance(data, dict):
+                    data = data.get("jobs", [])
+                if isinstance(data, list):
+                    for job_data in data:
+                        if isinstance(job_data, dict):
+                            job = CronJob.from_dict(job_data)
+                            self.jobs[job.job_id] = job
+            except (json.JSONDecodeError, TypeError, KeyError, AttributeError):
                 pass
 
     def _save(self) -> None:
@@ -274,7 +279,7 @@ class CronStore:
 # --- Scheduler ---
 
 # Type for the callback the scheduler calls when a job fires
-JobCallback = Callable[[CronJob], Awaitable[str | None]]
+JobCallback = Callable[[CronJob], Awaitable[Optional[str]]]
 
 
 class CronScheduler:

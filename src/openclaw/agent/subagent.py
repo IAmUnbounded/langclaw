@@ -150,59 +150,15 @@ async def run_subagent(config: SubAgentConfig) -> SubAgentResult:
         if config.depth >= MAX_SUBAGENT_DEPTH - 1:
             tools = [t for t in tools if t.name != "spawn_subagent"]
 
-        # Build the sub-agent graph
-        from openclaw.agent.graph import _get_llm
-        from langgraph.graph import END, StateGraph
-        from langgraph.prebuilt import ToolNode
-        from openclaw.agent.state import AgentState
+        # Build the sub-agent graph using the deepagents harness
+        from openclaw.agent.graph import build_agent_graph, _extract_text
         from langchain_core.messages import AIMessage
 
-        llm = _get_llm(cfg)
-        llm_with_tools = llm.bind_tools(tools) if tools else llm
-        tool_node = ToolNode(tools) if tools else None
-
         system_prompt = _build_subagent_prompt(config)
-
-        async def sub_llm_call(state: AgentState) -> dict[str, Any]:
-            messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
-            messages.extend(state.messages)
-            response = await llm_with_tools.ainvoke(messages)
-            return {"messages": [response]}
-
-        def sub_should_continue(state: AgentState):
-            last = state.messages[-1]
-            if isinstance(last, AIMessage) and last.tool_calls:
-                return "tools"
-            return "end"
-
-        graph = StateGraph(AgentState)
-        graph.add_node("llm_call", sub_llm_call)
-
-        if tool_node:
-            graph.add_node("tools", tool_node)
-            graph.set_entry_point("llm_call")
-            graph.add_conditional_edges(
-                "llm_call",
-                sub_should_continue,
-                {"tools": "tools", "end": END},
-            )
-            graph.add_edge("tools", "llm_call")
-        else:
-            graph.set_entry_point("llm_call")
-            graph.add_edge("llm_call", END)
-
-        compiled = graph.compile()
-
-        # Run in thread pool with timeout
-        initial_state = AgentState(
-            messages=[HumanMessage(content=config.task)],
-            run_id=run_id,
-            parent_run_id=config.parent_run_id,
-            depth=config.depth + 1,
-        )
+        compiled = build_agent_graph(cfg, system_prompt=system_prompt, session_id=run_id)
 
         result = await asyncio.wait_for(
-            compiled.ainvoke(initial_state),
+            compiled.ainvoke({"messages": [HumanMessage(content=config.task)]}),
             timeout=config.timeout,
         )
 
@@ -212,7 +168,7 @@ async def run_subagent(config: SubAgentConfig) -> SubAgentResult:
         for msg in result["messages"]:
             if isinstance(msg, AIMessage):
                 if msg.content:
-                    response_text = msg.content
+                    response_text = _extract_text(msg.content)
                 if msg.tool_calls:
                     tool_calls_made.extend(msg.tool_calls)
 
@@ -240,7 +196,7 @@ async def run_subagent(config: SubAgentConfig) -> SubAgentResult:
 
     except Exception as e:
         elapsed = time.time() - start_time
-        logger.error(f"❌ Sub-agent {run_id} failed: {e}")
+        logger.error(f"Sub-agent {run_id} failed: {e}")
         return SubAgentResult(
             success=False,
             response="",
@@ -248,3 +204,34 @@ async def run_subagent(config: SubAgentConfig) -> SubAgentResult:
             elapsed_seconds=elapsed,
             error=str(e),
         )
+
+
+def format_subagent_announcement(result: SubAgentResult, task: str = "") -> str:
+    """Format a sub-agent result as a structured announcement.
+
+    This mirrors OpenClaw's subagent-announce.ts — produces a readable
+    summary of what the sub-agent did for the parent agent to consume.
+    """
+    parts = []
+
+    status = "completed successfully" if result.success else "failed"
+    parts.append(f"**Sub-agent {result.run_id}** {status} in {result.elapsed_seconds:.1f}s")
+
+    if task:
+        parts.append(f"**Task:** {task[:200]}")
+
+    if result.error:
+        parts.append(f"**Error:** {result.error}")
+
+    if result.tool_calls:
+        tool_names = list({tc.get("name", "unknown") for tc in result.tool_calls})
+        parts.append(f"**Tools used:** {', '.join(tool_names[:10])}")
+
+    if result.response:
+        # Truncate long responses
+        response = result.response
+        if len(response) > 2000:
+            response = response[:2000] + "\n\n... (response truncated)"
+        parts.append(f"**Result:**\n{response}")
+
+    return "\n".join(parts)
